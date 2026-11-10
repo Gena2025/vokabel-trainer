@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="de" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Vokabel-Trainer (Leitner System)</title>
+  
+  <!-- Web App Manifest -->
+  <meta name="description" content="Eine Offline-App zum Lernen von englischen Vokabeln nach dem 5-Kasten Leitner-System.">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Outfit', 'sans-serif'],
+          },
+          colors: {
+            box1: '#EF5350', // Soft-Rot
+            box2: '#FFA726', // Soft-Orange
+            box3: '#FDD835', // Soft-Gelb
+            box4: '#9CCC65', // Soft-Hellgrün
+            box5: '#66BB6A', // Soft-Grün
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Absolute 3D Flip Container */
+    .perspective-container {
+      perspective: 1200px;
+    }
+    .card-flipper {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 320px;
+      transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
+      transform-style: preserve-3d;
+    }
+    .card-flipper.is-flipped {
+      transform: rotateY(180deg);
+    }
+    .card-face {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+      border-radius: 1.5rem;
+      overflow: hidden;
+    }
+    .card-face-back {
+      transform: rotateY(180deg);
+    }
+
+    /* Custom UI Polish */
+    .glass-card {
+      background: rgba(30, 41, 59, 0.75);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-nav {
+      background: rgba(15, 23, 42, 0.9);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col font-sans select-none overflow-hidden bg-slate-950 text-slate-100">
+
+  <!-- Top App Header -->
+  <header class="w-full bg-slate-900/90 border-b border-slate-800 px-4 py-3 flex items-center justify-between z-20 shadow-lg">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+        <i class="fa-solid fa-layer-group text-white text-base"></i>
+      </div>
+      <div>
+        <h1 class="font-display font-bold text-lg tracking-wide text-white leading-tight">Vokabel-Trainer</h1>
+        <p class="text-[11px] text-slate-400 font-medium">Leitner Karteikastensystem</p>
+      </div>
+    </div>
+    
+    <div class="flex items-center space-x-3">
+      <!-- Connection Status Badge -->
+      <div id="connectionStatus" class="hidden sm:flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="statusText">Online</span>
+      </div>
+
+      <!-- Settings Button -->
+      <button onclick="openSettingsModal()" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-all border border-slate-700 shadow-sm" title="Einstellungen & Datei-Speicher">
+        <i class="fa-solid fa-gear text-sm"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main View Container -->
+  <main class="flex-1 relative overflow-hidden">
+
+    <!-- Toast Notification -->
+    <div id="toast" class="absolute top-4 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 opacity-0 pointer-events-none transform -translate-y-4 w-11/12 max-w-md">
+      <div class="bg-slate-900/95 border border-amber-500/40 text-amber-200 px-4 py-3.5 rounded-2xl shadow-2xl flex items-center space-x-3 backdrop-blur-xl">
+        <div class="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
+          <i id="toastIcon" class="fa-solid fa-wifi text-amber-400 text-sm"></i>
+        </div>
+        <span id="toastMessage" class="text-xs sm:text-sm font-medium">Hinweis Nachricht</span>
+      </div>
+    </div>
+
+    <!-- Modal Dialog (Korrekturvorschlag) -->
+    <div id="correctionModal" class="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 hidden">
+      <div class="glass-card max-w-sm w-full p-5 rounded-3xl border border-indigo-500/30 space-y-4 shadow-2xl">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-2xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
+            <i class="fa-solid fa-wand-magic-sparkles text-lg"></i>
+          </div>
+          <div>
+            <h3 class="font-display font-bold text-white text-base">Übersetzung / Rechtschreibung</h3>
+            <p class="text-xs text-slate-400">Online-Wörterbuch Vorschlag</p>
+          </div>
+        </div>
+
+        <div class="space-y-2 text-xs bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
+          <div>
+            <span class="text-slate-500 uppercase text-[10px] font-bold tracking-wider">Deine Eingabe:</span>
+            <p id="modalUserTranslation" class="font-semibold text-slate-200 text-sm"></p>
+          </div>
+          <div class="pt-2 border-t border-slate-800/80">
+            <span class="text-indigo-400 uppercase text-[10px] font-bold tracking-wider">Empfohlene Korrektur:</span>
+            <p id="modalSuggestedTranslation" class="font-bold text-indigo-300 text-sm"></p>
+          </div>
+        </div>
+
+        <div class="flex flex-col space-y-2 pt-1">
+          <button onclick="acceptCorrection()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-xl text-xs sm:text-sm transition-all shadow-md">
+            Empfehlung übernehmen & speichern
+          </button>
+          <button onclick="editBeforeSave()" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-semibold py-2 rounded-xl text-xs transition-all flex items-center justify-center space-x-1.5">
+            <i class="fa-solid fa-pen-to-square"></i>
+            <span>Eingabe manuell anpassen</span>
+          </button>
+          <button onclick="keepOriginalTranslation()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded-xl text-xs transition-all border border-slate-700">
+            Eigene Eingabe behalten & speichern
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settingsModal" class="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 hidden">
+      <div class="glass-card max-w-sm w-full p-5 rounded-3xl border border-slate-700 space-y-4 shadow-2xl">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-2xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
+              <i class="fa-solid fa-gear text-lg"></i>
+            </div>
+            <div>
+              <h3 class="font-display font-bold text-white text-base">Einstellungen</h3>
+              <p class="text-xs text-slate-400">Sprache & Speicherort</p>
+            </div>
+          </div>
+          <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-white p-1">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+
+        <div class="space-y-4 pt-2 text-xs">
+          <!-- Vorlesegeschwindigkeit Slider -->
+          <div class="bg-slate-900/90 p-3.5 rounded-2xl border border-slate-800 space-y-2">
+            <div class="flex justify-between items-center">
+              <label for="speechRateRange" class="font-bold text-slate-200 flex items-center space-x-2">
+                <i class="fa-solid fa-gauge-high text-indigo-400"></i>
+                <span>Vorlesegeschwindigkeit</span>
+              </label>
+              <span id="speechRateValue" class="font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-md text-[11px]">1.0x</span>
+            </div>
+            <input type="range" id="speechRateRange" min="0.5" max="1.5" step="0.1" value="1.0" oninput="updateSpeechRateDisplay(this.value)" class="w-full accent-indigo-500 bg-slate-800 h-2 rounded-lg cursor-pointer">
+            <div class="flex justify-between text-[10px] text-slate-500 font-medium px-0.5">
+              <span>0.5x (Langsam)</span>
+              <span>1.0x (Normal)</span>
+              <span>1.5x (Schnell)</span>
+            </div>
+          </div>
+
+          <!-- Über diese App Button -->
+          <button onclick="openAboutModal()" class="w-full bg-slate-900/90 hover:bg-slate-800 p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between text-slate-200 transition-all font-semibold">
+            <div class="flex items-center space-x-2 text-indigo-400">
+              <i class="fa-solid fa-circle-info text-base"></i>
+              <span class="text-slate-200 text-xs">Über diese App</span>
+            </div>
+            <i class="fa-solid fa-chevron-right text-slate-500 text-xs"></i>
+          </button>
+
+          <!-- Hinweis fester Speicherpfad -->
+          <div class="bg-slate-900/90 p-3 rounded-2xl border border-slate-800 space-y-1">
+            <div class="flex items-center space-x-2 text-indigo-400 font-bold">
+              <i class="fa-solid fa-folder-closed text-xs"></i>
+              <span class="text-slate-200 text-[11px]">Standard-Speicherort für Backups:</span>
+            </div>
+            <p class="text-[11px] text-slate-400 font-mono pl-4">/Documents/vokabel-trainer/</p>
+          </div>
+
+          <div class="pt-2 border-t border-slate-800 flex space-x-2">
+            <button onclick="exportVocabJSON()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 py-2.5 rounded-xl font-medium transition-all border border-slate-700 flex items-center justify-center space-x-2">
+              <i class="fa-solid fa-download text-indigo-400"></i>
+              <span>Exportieren</span>
+            </button>
+            <label class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 py-2.5 rounded-xl font-medium transition-all border border-slate-700 flex items-center justify-center space-x-2 cursor-pointer">
+              <i class="fa-solid fa-upload text-emerald-400"></i>
+              <span>Importieren</span>
+              <input type="file" accept=".json" onchange="importVocabJSON(event)" class="hidden">
+            </label>
+          </div>
+        </div>
+
+        <button onclick="closeSettingsModal()" class="w-full bg-slate-900 hover:bg-slate-800 text-slate-300 py-2.5 rounded-xl font-medium text-xs border border-slate-800 transition-all mt-2">
+          Schließen
+        </button>
+      </div>
+    </div>
+
+    <!-- ABOUT APP MODAL -->
+    <div id="aboutModal" class="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 hidden">
+      <div class="glass-card max-w-sm w-full p-6 rounded-3xl border border-slate-700 space-y-5 shadow-2xl">
+        <div class="flex items-start justify-between">
+          <div class="flex items-center space-x-3.5">
+            <div class="w-11 h-11 rounded-2xl bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0 shadow-inner">
+              <i class="fa-solid fa-info text-xl"></i>
+            </div>
+            <div>
+              <h3 class="font-display font-bold text-white text-lg leading-tight">Über Vokabel-Trainer</h3>
+              <p class="text-xs text-slate-400">Version 1.0.0</p>
+            </div>
+          </div>
+          <button onclick="closeAboutModal()" class="text-slate-400 hover:text-white p-1 transition-colors">
+            <i class="fa-solid fa-xmark text-xl"></i>
+          </button>
+        </div>
+
+        <div class="bg-slate-900/90 p-4 rounded-2xl border border-slate-800/80 space-y-4 text-xs">
+          <p class="text-slate-300 leading-relaxed">
+            Diese App hilft beim effizienten Erlernen von englischen Vokabeln nach dem bewährten 5-Kasten Leitner-System.
+          </p>
+
+          <div class="space-y-2 pt-3 border-t border-slate-800/80 text-slate-300">
+            <div>
+              <span class="font-bold text-white">Entwickler:</span> <span class="text-slate-400">Gena2025</span>
+            </div>
+            <div>
+              <span class="font-bold text-white">Funktion:</span> <span class="text-slate-400">Offline-Karteikastensystem mit Vorlesefunktion</span>
+            </div>
+            <div>
+              <span class="font-bold text-white">Hinweis:</span> <span class="text-slate-400">Alle Daten werden lokal auf Ihrem Gerät gespeichert.</span>
+            </div>
+          </div>
+        </div>
+
+        <button onclick="closeAboutModal()" class="w-full bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white py-3 rounded-2xl font-semibold text-sm transition-all shadow-lg shadow-indigo-600/30">
+          Schließen
+        </button>
+      </div>
+    </div>
+
+    <!-- VIEW 1: DASHBOARD -->
+    <section id="viewDashboard" class="absolute inset-0 p-3 sm:p-4 flex flex-col justify-between overflow-hidden pb-20">
+      <div class="flex items-center justify-between shrink-0 mb-1">
+        <h2 class="font-display font-bold text-slate-200 text-sm sm:text-base">Deine Karteikästen</h2>
+        <span id="totalVocabCount" class="text-xs bg-slate-800 text-slate-400 px-3 py-0.5 rounded-full border border-slate-700/80 font-medium">Gesamt: 0</span>
+      </div>
+
+      <div class="flex-1 grid grid-rows-5 gap-2 my-auto">
+        <!-- Box 1 -->
+        <div class="glass-card rounded-xl px-3 py-2 border-l-4 border-l-box1 shadow-md flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <span class="w-2.5 h-2.5 rounded-full bg-box1 shrink-0"></span>
+            <div>
+              <div class="flex items-center space-x-2">
+                <h3 class="font-display font-bold text-slate-100 text-sm sm:text-base">Kasten 1</h3>
+                <span id="count-box-1" class="text-xs font-bold text-slate-200 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">0</span>
+              </div>
+              <p class="text-[11px] text-slate-400 leading-none mt-0.5">Schwer merkbar – oft üben</p>
+            </div>
+          </div>
+          <div class="flex space-x-1.5 shrink-0">
+            <button onclick="startLearning(1)" class="bg-gradient-to-r from-red-500/90 to-rose-600/90 hover:from-red-500 hover:to-rose-600 text-white py-1.5 px-3 rounded-lg font-semibold text-xs flex items-center space-x-1.5 shadow-sm active:scale-95 transition-all">
+              <i class="fa-solid fa-play text-[10px]"></i>
+              <span>Lernen</span>
+            </button>
+            <button onclick="openFilteredList(1)" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded-lg text-xs border border-slate-700 transition-all">
+              <i class="fa-solid fa-list-ul"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Box 2 -->
+        <div class="glass-card rounded-xl px-3 py-2 border-l-4 border-l-box2 shadow-md flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <span class="w-2.5 h-2.5 rounded-full bg-box2 shrink-0"></span>
+            <div>
+              <div class="flex items-center space-x-2">
+                <h3 class="font-display font-bold text-slate-100 text-sm sm:text-base">Kasten 2</h3>
+                <span id="count-box-2" class="text-xs font-bold text-slate-200 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">0</span>
+              </div>
+              <p class="text-[11px] text-slate-400 leading-none mt-0.5">Etwas besser gelernt</p>
+            </div>
+          </div>
+          <div class="flex space-x-1.5 shrink-0">
+            <button onclick="startLearning(2)" class="bg-gradient-to-r from-amber-500/90 to-orange-600/90 hover:from-amber-500 hover:to-orange-600 text-white py-1.5 px-3 rounded-lg font-semibold text-xs flex items-center space-x-1.5 shadow-sm active:scale-95 transition-all">
+              <i class="fa-solid fa-play text-[10px]"></i>
+              <span>Lernen</span>
+            </button>
+            <button onclick="openFilteredList(2)" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded-lg text-xs border border-slate-700 transition-all">
+              <i class="fa-solid fa-list-ul"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Box 3 -->
+        <div class="glass-card rounded-xl px-3 py-2 border-l-4 border-l-box3 shadow-md flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <span class="w-2.5 h-2.5 rounded-full bg-box3 shrink-0"></span>
+            <div>
+              <div class="flex items-center space-x-2">
+                <h3 class="font-display font-bold text-slate-100 text-sm sm:text-base">Kasten 3</h3>
+                <span id="count-box-3" class="text-xs font-bold text-slate-200 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">0</span>
+              </div>
+              <p class="text-[11px] text-slate-400 leading-none mt-0.5">Mittlerer Lernfortschritt</p>
+            </div>
+          </div>
+          <div class="flex space-x-1.5 shrink-0">
+            <button onclick="startLearning(3)" class="bg-gradient-to-r from-yellow-500/90 to-amber-500/90 hover:from-yellow-500 hover:to-amber-500 text-slate-950 font-bold py-1.5 px-3 rounded-lg text-xs flex items-center space-x-1.5 shadow-sm active:scale-95 transition-all">
+              <i class="fa-solid fa-play text-[10px]"></i>
+              <span>Lernen</span>
+            </button>
+            <button onclick="openFilteredList(3)" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded-lg text-xs border border-slate-700 transition-all">
+              <i class="fa-solid fa-list-ul"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Box 4 -->
+        <div class="glass-card rounded-xl px-3 py-2 border-l-4 border-l-box4 shadow-md flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <span class="w-2.5 h-2.5 rounded-full bg-box4 shrink-0"></span>
+            <div>
+              <div class="flex items-center space-x-2">
+                <h3 class="font-display font-bold text-slate-100 text-sm sm:text-base">Kasten 4</h3>
+                <span id="count-box-4" class="text-xs font-bold text-slate-200 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">0</span>
+              </div>
+              <p class="text-[11px] text-slate-400 leading-none mt-0.5">Fast fest – kleine Fehler</p>
+            </div>
+          </div>
+          <div class="flex space-x-1.5 shrink-0">
+            <button onclick="startLearning(4)" class="bg-gradient-to-r from-lime-500/90 to-emerald-600/90 hover:from-lime-500 hover:to-emerald-600 text-white py-1.5 px-3 rounded-lg font-semibold text-xs flex items-center space-x-1.5 shadow-sm active:scale-95 transition-all">
+              <i class="fa-solid fa-play text-[10px]"></i>
+              <span>Lernen</span>
+            </button>
+            <button onclick="openFilteredList(4)" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded-lg text-xs border border-slate-700 transition-all">
+              <i class="fa-solid fa-list-ul"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Box 5 -->
+        <div class="glass-card rounded-xl px-3 py-2 border-l-4 border-l-box5 shadow-md flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <span class="w-2.5 h-2.5 rounded-full bg-box5 shrink-0"></span>
+            <div>
+              <div class="flex items-center space-x-2">
+                <h3 class="font-display font-bold text-slate-100 text-sm sm:text-base">Kasten 5</h3>
+                <span id="count-box-5" class="text-xs font-bold text-slate-200 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">0</span>
+              </div>
+              <p class="text-[11px] text-slate-400 leading-none mt-0.5">Fest gelernt (Gemeistert)</p>
+            </div>
+          </div>
+          <div class="flex space-x-1.5 shrink-0">
+            <button onclick="startLearning(5)" class="bg-gradient-to-r from-emerald-500/90 to-teal-600/90 hover:from-emerald-500 hover:to-teal-600 text-white py-1.5 px-3 rounded-lg font-semibold text-xs flex items-center space-x-1.5 shadow-sm active:scale-95 transition-all">
+              <i class="fa-solid fa-play text-[10px]"></i>
+              <span>Lernen</span>
+            </button>
+            <button onclick="openFilteredList(5)" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded-lg text-xs border border-slate-700 transition-all">
+              <i class="fa-solid fa-list-ul"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 2: LEARN MODE -->
+    <section id="viewLearn" class="absolute inset-0 p-4 flex flex-col justify-between hidden pb-24 overflow-y-auto">
+      <div class="space-y-3 shrink-0">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span id="learnBoxBadge" class="w-3.5 h-3.5 rounded-full bg-box1 shadow-md"></span>
+            <span id="learnBoxTitle" class="font-display font-bold text-slate-200 text-base">Kasten 1</span>
+          </div>
+          <span id="learnProgressText" class="text-xs font-semibold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1 rounded-full">
+            Karte 0 von 0
+          </span>
+        </div>
+
+        <div class="bg-slate-900 p-1 rounded-xl border border-slate-800 flex text-xs font-medium">
+          <button id="dirEnDeBtn" onclick="setDirection('EN_DE')" class="flex-1 py-2 rounded-lg text-center transition-all bg-indigo-600 text-white font-semibold shadow-sm">
+            Englisch <i class="fa-solid fa-arrow-right text-[10px] mx-1"></i> Deutsch
+          </button>
+          <button id="dirDeEnBtn" onclick="setDirection('DE_EN')" class="flex-1 py-2 rounded-lg text-center transition-all text-slate-400 hover:text-slate-200">
+            Deutsch <i class="fa-solid fa-arrow-right text-[10px] mx-1"></i> Englisch
+          </button>
+        </div>
+      </div>
+
+      <div id="learnArea" class="my-auto w-full max-w-sm mx-auto py-2">
+        <div class="perspective-container w-full min-h-[320px] sm:min-h-[360px] cursor-pointer" onclick="flipCard()">
+          <div id="cardFlipper" class="card-flipper min-h-[320px] sm:min-h-[360px]">
+            
+            <!-- FRONT -->
+            <div class="card-face p-5 sm:p-6 flex flex-col justify-between bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-slate-700/80 shadow-2xl">
+              <div class="flex justify-between items-center shrink-0 mb-2">
+                <span class="text-[11px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30" id="frontLangTag">
+                  ENGLISCH
+                </span>
+                <button onclick="speakText(event, false)" title="Vorlesen" class="w-10 h-10 rounded-xl bg-slate-800/90 hover:bg-indigo-600 text-slate-300 hover:text-white flex items-center justify-center transition-all shadow-md active:scale-95 border border-slate-700">
+                  <i class="fa-solid fa-volume-high text-base"></i>
+                </button>
+              </div>
+
+              <div class="my-auto text-center px-2 py-4 flex flex-col items-center justify-center min-h-[160px]">
+                <h2 id="cardFrontText" class="font-display font-extrabold text-2xl sm:text-3xl text-white tracking-wide break-words leading-tight">
+                  Vocabulary
+                </h2>
+                <div id="cardFrontSentenceWrapper" class="mt-4 pt-3 border-t border-slate-800/80 w-full hidden">
+                  <p id="cardFrontSentence" class="text-xs sm:text-sm italic text-slate-300 leading-relaxed font-light">
+                    "Sample sentence."
+                  </p>
+                </div>
+              </div>
+
+              <div class="text-center text-xs text-slate-500 font-medium flex items-center justify-center space-x-1.5 shrink-0 pt-2 border-t border-slate-800/40">
+                <i class="fa-solid fa-rotate text-indigo-400 text-[11px]"></i>
+                <span>Tippen zum Umdrehen</span>
+              </div>
+            </div>
+
+            <!-- BACK -->
+            <div class="card-face card-face-back p-5 sm:p-6 flex flex-col justify-between bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-emerald-500/40 shadow-2xl">
+              <div class="flex justify-between items-center shrink-0 mb-2">
+                <span class="text-[11px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" id="backLangTag">
+                  DEUTSCH
+                </span>
+                <div class="flex items-center space-x-2">
+                  <button onclick="deleteCurrentCard(event)" title="Löschen" class="w-10 h-10 rounded-xl bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white flex items-center justify-center transition-all shadow-md active:scale-95 border border-rose-500/20">
+                    <i class="fa-solid fa-trash-can text-sm"></i>
+                  </button>
+                  <button onclick="speakText(event, true)" title="Vorlesen" class="w-10 h-10 rounded-xl bg-slate-800/90 hover:bg-emerald-600 text-slate-300 hover:text-white flex items-center justify-center transition-all shadow-md active:scale-95 border border-slate-700">
+                    <i class="fa-solid fa-volume-high text-base"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="my-auto text-center px-2 py-4 flex flex-col items-center justify-center min-h-[160px]">
+                <h2 id="cardBackText" class="font-display font-extrabold text-2xl sm:text-3xl text-emerald-400 tracking-wide break-words leading-tight">
+                  Bedeutung
+                </h2>
+                <div id="cardBackSentenceWrapper" class="mt-4 pt-3 border-t border-slate-800/80 w-full hidden">
+                  <p id="cardBackSentence" class="text-xs sm:text-sm italic text-slate-300 leading-relaxed font-light">
+                    "Beispielsatz."
+                  </p>
+                </div>
+              </div>
+
+              <div class="text-center text-xs text-slate-500 font-medium flex items-center justify-center space-x-1.5 shrink-0 pt-2 border-t border-slate-800/40">
+                <i class="fa-solid fa-rotate text-emerald-400 text-[11px]"></i>
+                <span>Rückseite</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="mt-3 flex space-x-2">
+          <button onclick="flipCard()" class="flex-1 bg-slate-900 hover:bg-slate-800 active:scale-[0.99] text-slate-200 border border-slate-800 py-3 rounded-2xl font-medium text-xs sm:text-sm flex items-center justify-center space-x-2 transition-all shadow-md">
+            <i class="fa-solid fa-rotate-left text-indigo-400"></i>
+            <span>Karte umdrehen</span>
+          </button>
+          <button onclick="deleteCurrentCard(event)" class="bg-slate-900 hover:bg-rose-950/40 text-rose-400 border border-slate-800 hover:border-rose-500/30 px-4 py-3 rounded-2xl font-medium text-xs transition-all shadow-md flex items-center justify-center">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </div>
+      </div>
+
+      <div id="noCardsBanner" class="hidden my-auto text-center glass-card p-8 rounded-3xl border border-slate-800 max-w-sm mx-auto">
+        <div class="w-16 h-16 bg-slate-800/80 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl shadow-inner border border-slate-700">
+          <i class="fa-solid fa-box-open"></i>
+        </div>
+        <h3 class="font-display font-bold text-lg text-slate-200 mb-1">Keine Vokabeln im Kasten</h3>
+        <p class="text-xs text-slate-400 mb-6 leading-relaxed">Füge neue Vokabeln hinzu oder wähle einen anderen Kasten aus.</p>
+        <button onclick="switchTab('add')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 px-5 rounded-xl text-xs sm:text-sm transition-all shadow-lg shadow-indigo-600/30">
+          <i class="fa-solid fa-plus mr-1.5"></i> Vokabel hinzufügen
+        </button>
+      </div>
+
+      <div id="boxMoveControls" class="space-y-2">
+        <p class="text-center text-xs text-slate-400 font-medium">Einsortieren in Kasten:</p>
+        <div class="grid grid-cols-5 gap-2">
+          <button onclick="moveCurrentCardToBox(1)" class="py-2.5 rounded-xl font-display font-extrabold text-slate-950 bg-box1 hover:brightness-110 active:scale-95 transition-all shadow-md text-sm">1</button>
+          <button onclick="moveCurrentCardToBox(2)" class="py-2.5 rounded-xl font-display font-extrabold text-slate-950 bg-box2 hover:brightness-110 active:scale-95 transition-all shadow-md text-sm">2</button>
+          <button onclick="moveCurrentCardToBox(3)" class="py-2.5 rounded-xl font-display font-extrabold text-slate-950 bg-box3 hover:brightness-110 active:scale-95 transition-all shadow-md text-sm">3</button>
+          <button onclick="moveCurrentCardToBox(4)" class="py-2.5 rounded-xl font-display font-extrabold text-slate-950 bg-box4 hover:brightness-110 active:scale-95 transition-all shadow-md text-sm">4</button>
+          <button onclick="moveCurrentCardToBox(5)" class="py-2.5 rounded-xl font-display font-extrabold text-slate-950 bg-box5 hover:brightness-110 active:scale-95 transition-all shadow-md text-sm">5</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 3: VOCABULARY LIST -->
+    <section id="viewList" class="absolute inset-0 p-3 sm:p-4 flex flex-col hidden pb-20">
+      <div class="space-y-2 mb-3 shrink-0">
+        <div class="relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+          <input type="text" id="searchInput" oninput="renderList()" placeholder="Vokabel suchen..." class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors">
+        </div>
+
+        <div class="grid grid-cols-6 gap-1.5 text-xs">
+          <button onclick="filterListByBox('all')" id="filter-btn-all" class="py-2 rounded-xl font-bold transition-all text-center bg-indigo-600 text-white shadow-sm">
+            Alle (<span id="filter-count-all">0</span>)
+          </button>
+          <button onclick="filterListByBox(1)" id="filter-btn-1" class="py-2 rounded-xl font-extrabold transition-all text-center bg-box1 text-slate-950 opacity-50 hover:opacity-100">K1</button>
+          <button onclick="filterListByBox(2)" id="filter-btn-2" class="py-2 rounded-xl font-extrabold transition-all text-center bg-box2 text-slate-950 opacity-50 hover:opacity-100">K2</button>
+          <button onclick="filterListByBox(3)" id="filter-btn-3" class="py-2 rounded-xl font-extrabold transition-all text-center bg-box3 text-slate-950 opacity-50 hover:opacity-100">K3</button>
+          <button onclick="filterListByBox(4)" id="filter-btn-4" class="py-2 rounded-xl font-extrabold transition-all text-center bg-box4 text-slate-950 opacity-50 hover:opacity-100">K4</button>
+          <button onclick="filterListByBox(5)" id="filter-btn-5" class="py-2 rounded-xl font-extrabold transition-all text-center bg-box5 text-slate-950 opacity-50 hover:opacity-100">K5</button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto space-y-2 pr-1" id="vocabListContainer"></div>
+    </section>
+
+    <!-- VIEW 4: ADD / EDIT VOCABULARY -->
+    <section id="viewAdd" class="absolute inset-0 p-4 overflow-y-auto hidden pb-24">
+      <div class="max-w-md mx-auto space-y-4">
+        <div>
+          <h2 id="addFormTitle" class="font-display font-bold text-xl text-white">Neue Vokabel hinzufügen</h2>
+          <p id="addFormSub" class="text-xs text-slate-400 mt-0.5">Erstelle eine neue Karteikarte mit Rechtschreibprüfung.</p>
+        </div>
+
+        <form id="addVocabForm" onsubmit="handleVocabSubmit(event)" class="space-y-3.5">
+          <input type="hidden" id="editVocabId" value="">
+
+          <div>
+            <label class="block text-[11px] font-bold tracking-wider uppercase text-slate-300 mb-1">Englische Vokabel *</label>
+            <input type="text" id="inputEnglish" required placeholder="z. B. ambitious oder love" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-bold tracking-wider uppercase text-slate-300 mb-1">Deutsche Bedeutung(en) *</label>
+            <input type="text" id="inputGerman" required placeholder="z. B. Liebe" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-bold tracking-wider uppercase text-slate-400 mb-1">Englischer Hilfssatz (Optional)</label>
+            <input type="text" id="inputSentenceEn" placeholder="z. B. Love is in the air." class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-bold tracking-wider uppercase text-slate-400 mb-1">Deutscher Hilfssatz (Optional)</label>
+            <input type="text" id="inputSentenceDe" placeholder="z. B. Liebe liegt in der Luft." class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-bold tracking-wider uppercase text-slate-300 mb-1.5">Ziel-Karteikasten</label>
+            <div class="grid grid-cols-5 gap-2">
+              <label class="cursor-pointer">
+                <input type="radio" name="targetBox" value="1" checked class="peer sr-only">
+                <div class="py-2.5 text-center font-extrabold text-xs sm:text-sm rounded-xl border border-slate-800 peer-checked:bg-box1 peer-checked:text-slate-950 text-slate-400 bg-slate-900 transition-all">1</div>
+              </label>
+              <label class="cursor-pointer">
+                <input type="radio" name="targetBox" value="2" class="peer sr-only">
+                <div class="py-2.5 text-center font-extrabold text-xs sm:text-sm rounded-xl border border-slate-800 peer-checked:bg-box2 peer-checked:text-slate-950 text-slate-400 bg-slate-900 transition-all">2</div>
+              </label>
+              <label class="cursor-pointer">
+                <input type="radio" name="targetBox" value="3" class="peer sr-only">
+                <div class="py-2.5 text-center font-extrabold text-xs sm:text-sm rounded-xl border border-slate-800 peer-checked:bg-box3 peer-checked:text-slate-950 text-slate-400 bg-slate-900 transition-all">3</div>
+              </label>
+              <label class="cursor-pointer">
+                <input type="radio" name="targetBox" value="4" class="peer sr-only">
+                <div class="py-2.5 text-center font-extrabold text-xs sm:text-sm rounded-xl border border-slate-800 peer-checked:bg-box4 peer-checked:text-slate-950 text-slate-400 bg-slate-900 transition-all">4</div>
+              </label>
+              <label class="cursor-pointer">
+                <input type="radio" name="targetBox" value="5" class="peer sr-only">
+                <div class="py-2.5 text-center font-extrabold text-xs sm:text-sm rounded-xl border border-slate-800 peer-checked:bg-box5 peer-checked:text-slate-950 text-slate-400 bg-slate-900 transition-all">5</div>
+              </label>
+            </div>
+          </div>
+
+          <div class="pt-2 flex flex-col space-y-2">
+            <button type="submit" id="saveBtn" class="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white py-3 rounded-2xl font-semibold text-xs sm:text-sm transition-all shadow-lg flex items-center justify-center space-x-2">
+              <i class="fa-solid fa-cloud-arrow-up text-xs"></i>
+              <span id="saveBtnText">Prüfen & Speichern</span>
+            </button>
+            <button type="button" id="cancelEditBtn" onclick="cancelEditMode()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 rounded-2xl font-medium text-xs border border-slate-700 transition-all hidden">
+              Bearbeiten abbrechen
+            </button>
+            <button type="button" onclick="saveWithoutCheck()" class="w-full bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 py-2.5 rounded-2xl font-medium text-xs border border-slate-800 transition-all">
+              Direkt ohne Prüfung speichern
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bottom Nav -->
+  <nav class="fixed bottom-0 left-0 right-0 h-16 glass-nav z-30 flex items-center justify-around px-2 border-t border-slate-800">
+    <button onclick="switchTab('dashboard')" id="nav-dashboard" class="flex flex-col items-center justify-center w-full h-full text-indigo-400 transition-colors">
+      <i class="fa-solid fa-house text-base"></i>
+      <span class="text-[10px] mt-1 font-medium">Kästen</span>
+    </button>
+    <button onclick="switchTab('learn')" id="nav-learn" class="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-slate-200 transition-colors">
+      <i class="fa-solid fa-clone text-base"></i>
+      <span class="text-[10px] mt-1 font-medium">Lernen</span>
+    </button>
+    <button onclick="switchTab('list')" id="nav-list" class="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-slate-200 transition-colors">
+      <i class="fa-solid fa-list-check text-base"></i>
+      <span class="text-[10px] mt-1 font-medium">Liste</span>
+    </button>
+    <button onclick="switchTab('add')" id="nav-add" class="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-slate-200 transition-colors">
+      <i class="fa-solid fa-circle-plus text-base"></i>
+      <span class="text-[10px] mt-1 font-medium">Hinzufügen</span>
+    </button>
+  </nav>
+
+  <!-- Script Logic -->
+  <script>
+    const initialVocabularies = [
+      { id: '1', english: 'ambitious', german: 'ehrgeizig, anspruchsvoll', sentenceEn: 'She is very ambitious about her career.', sentenceDe: 'Sie ist sehr ehrgeizig bezüglich ihrer Karriere.', box: 1 },
+      { id: '2', english: 'resilient', german: 'widerstandsfähig, belastbar', sentenceEn: 'Children are often remarkably resilient.', sentenceDe: 'Kinder sind oft bemerkenswert widerstandsfähig.', box: 1 },
+      { id: '3', english: 'inevitable', german: 'unvermeidlich, zwangsläufig', sentenceEn: 'Accidents are inevitable in this risky job.', sentenceDe: 'Unfälle sind in diesem riskanten Job unvermeidlich.', box: 1 },
+      { id: '4', english: 'curiosity', german: 'Neugier, Wissensdrang', sentenceEn: 'Her curiosity led her to explore the ancient cave.', sentenceDe: 'Ihre Neugier führte sie dazu, die alte Höhle zu erkunden.', box: 2 },
+      { id: '5', english: 'persistent', german: 'hartnäckig, ausdauernd', sentenceEn: 'He was persistent and finally got the job.', sentenceDe: 'Er war hartnäckig und bekam schließlich den Job.', box: 2 },
+      { id: '6', english: 'versatile', german: 'vielseitig einsetzbar', sentenceEn: 'This pocket knife is extremely versatile.', sentenceDe: 'Dieses Taschenmesser ist extrem vielseitig.', box: 3 },
+      { id: '7', english: 'meticulous', german: 'sorgfältig, akribisch', sentenceEn: 'He paid meticulous attention to details.', sentenceDe: 'Er achtete akribisch auf Details.', box: 4 },
+      { id: '8', english: 'opportunity', german: 'Gelegenheit, Chance', sentenceEn: 'Don\'t miss this great opportunity.', sentenceDe: 'Verpasse diese große Chance nicht.', box: 5 }
+    ];
+
+    let vocabularies = [];
+    let currentActiveTab = 'dashboard';
+    let currentLearningBox = 1;
+    let learningPool = []; 
+    let currentCardIndex = 0;
+    let isCardFlipped = false;
+    let editingVocabId = null;
+    let pendingVocab = null;
+    let suggestedTranslation = null;
+    let currentListFilter = 'all';
+    let learningDirection = 'EN_DE';
+    let speechRate = 1.0;
+    let customDirectoryHandle = null;
+
+    // Local Storage Management
+    function loadVocabularies() {
+      const stored = localStorage.getItem('vokabel_trainer_data');
+      if (stored) {
+        try {
+          vocabularies = JSON.parse(stored);
+        } catch (e) {
+          vocabularies = [...initialVocabularies];
+        }
+      } else {
+        vocabularies = [...initialVocabularies];
+        saveVocabularies();
+      }
+      updateDashboardCounts();
+    }
+
+    function saveVocabularies() {
+      localStorage.setItem('vokabel_trainer_data', JSON.stringify(vocabularies));
+      updateDashboardCounts();
+    }
+
+    function showToast(message, iconClass = "fa-info-circle") {
+      const toast = document.getElementById('toast');
+      const toastMessage = document.getElementById('toastMessage');
+      const toastIcon = document.getElementById('toastIcon');
+
+      toastMessage.textContent = message;
+      toastIcon.className = `fa-solid ${iconClass} text-amber-400 text-sm`;
+
+      toast.classList.remove('opacity-0', 'pointer-events-none', '-translate-y-4');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', 'pointer-events-none', '-translate-y-4');
+      }, 3000);
+    }
+
+    function updateOnlineStatus() {
+      const statusBadge = document.getElementById('connectionStatus');
+      const statusText = document.getElementById('statusText');
+      const isOnline = navigator.onLine;
+
+      if (statusBadge && statusText) {
+        if (isOnline) {
+          statusBadge.className = "hidden sm:flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+          statusText.textContent = "Online";
+        } else {
+          statusBadge.className = "hidden sm:flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors bg-amber-500/10 text-amber-400 border-amber-500/20";
+          statusText.textContent = "Offline";
+        }
+      }
+
+      const saveBtnText = document.getElementById('saveBtnText');
+      if (saveBtnText && !editingVocabId) {
+        saveBtnText.textContent = isOnline ? "Prüfen & Speichern" : "Vokabel speichern (Offline)";
+      }
+    }
+
+    function openSettingsModal() {
+      document.getElementById('settingsModal').classList.remove('hidden');
+    }
+
+    function closeSettingsModal() {
+      document.getElementById('settingsModal').classList.add('hidden');
+    }
+
+    function openAboutModal() {
+      document.getElementById('aboutModal').classList.remove('hidden');
+    }
+
+    function closeAboutModal() {
+      document.getElementById('aboutModal').classList.add('hidden');
+    }
+
+    function updateSpeechRateDisplay(val) {
+      speechRate = parseFloat(val);
+      document.getElementById('speechRateValue').textContent = `${speechRate.toFixed(1)}x`;
+    }
+
+    function exportVocabJSON() {
+      const filename = `vokabeln_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(vocabularies, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", filename);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      showToast(`Gesichert als ${filename} (speichern unter /Documents/vokabel-trainer/)`, "fa-download");
+    }
+
+    function importVocabJSON(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const importedData = JSON.parse(e.target.result);
+          if (Array.isArray(importedData)) {
+            vocabularies = importedData;
+            saveVocabularies();
+            renderList();
+            showToast("Vokabeln erfolgreich importiert!", "fa-upload");
+            closeSettingsModal();
+          } else {
+            showToast("Ungültiges JSON Format.", "fa-triangle-exclamation");
+          }
+        } catch (err) {
+          showToast("Fehler beim Lesen der Datei.", "fa-triangle-exclamation");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function switchTab(tabName) {
+      currentActiveTab = tabName;
+      ['dashboard', 'learn', 'list', 'add'].forEach(t => {
+        const el = document.getElementById(`view${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        if (el) el.classList.add('hidden');
+        const btn = document.getElementById(`nav-${t}`);
+        if (t === tabName) {
+          btn.className = "flex flex-col items-center justify-center w-full h-full text-indigo-400 font-semibold";
+        } else {
+          btn.className = "flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-slate-200";
+        }
+      });
+
+      const activeView = document.getElementById(`view${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
+      if (activeView) activeView.classList.remove('hidden');
+      if (tabName === 'list') renderList();
+    }
+
+    function updateDashboardCounts() {
+      document.getElementById('totalVocabCount').textContent = `Gesamt: ${vocabularies.length}`;
+      for (let i = 1; i <= 5; i++) {
+        const count = vocabularies.filter(v => Number(v.box) === i).length;
+        document.getElementById(`count-box-${i}`).textContent = count;
+      }
+    }
+
+    function openFilteredList(boxNum) {
+      filterListByBox(boxNum);
+      switchTab('list');
+    }
+
+    function startLearning(boxNum) {
+      currentLearningBox = Number(boxNum);
+      const boxColors = { 1: '#EF5350', 2: '#FFA726', 3: '#FDD835', 4: '#9CCC65', 5: '#66BB6A' };
+
+      document.getElementById('learnBoxTitle').textContent = `Kasten ${currentLearningBox}`;
+      document.getElementById('learnBoxBadge').style.backgroundColor = boxColors[currentLearningBox];
+
+      const boxCards = vocabularies.filter(v => Number(v.box) === currentLearningBox);
+      learningPool = [...boxCards].sort(() => 0.5 - Math.random()).slice(0, 20);
+      currentCardIndex = 0;
+
+      resetCardTransform();
+      updateLearningCardDisplay();
+      switchTab('learn');
+    }
+
+    function setDirection(dir) {
+      learningDirection = dir;
+      const enBtn = document.getElementById('dirEnDeBtn');
+      const deBtn = document.getElementById('dirDeEnBtn');
+
+      if (dir === 'EN_DE') {
+        enBtn.className = "flex-1 py-2 rounded-lg text-center bg-indigo-600 text-white font-semibold shadow-sm";
+        deBtn.className = "flex-1 py-2 rounded-lg text-center text-slate-400 hover:text-slate-200";
+      } else {
+        deBtn.className = "flex-1 py-2 rounded-lg text-center bg-indigo-600 text-white font-semibold shadow-sm";
+        enBtn.className = "flex-1 py-2 rounded-lg text-center text-slate-400 hover:text-slate-200";
+      }
+
+      resetCardTransform();
+      updateLearningCardDisplay();
+    }
+
+    function updateLearningCardDisplay() {
+      const learnArea = document.getElementById('learnArea');
+      const noCardsBanner = document.getElementById('noCardsBanner');
+      const boxMoveControls = document.getElementById('boxMoveControls');
+      const progressText = document.getElementById('learnProgressText');
+
+      if (!learningPool || learningPool.length === 0) {
+        learnArea.classList.add('hidden');
+        boxMoveControls.classList.add('hidden');
+        noCardsBanner.classList.remove('hidden');
+        progressText.textContent = `0 Vokabeln`;
+        return;
+      }
+
+      learnArea.classList.remove('hidden');
+      boxMoveControls.classList.remove('hidden');
+      noCardsBanner.classList.add('hidden');
+
+      const card = learningPool[currentCardIndex];
+      progressText.textContent = `Karte ${currentCardIndex + 1} von ${learningPool.length}`;
+
+      const frontLangTag = document.getElementById('frontLangTag');
+      const backLangTag = document.getElementById('backLangTag');
+      const frontText = document.getElementById('cardFrontText');
+      const frontSent = document.getElementById('cardFrontSentence');
+      const frontSentWrapper = document.getElementById('cardFrontSentenceWrapper');
+      const backText = document.getElementById('cardBackText');
+      const backSent = document.getElementById('cardBackSentence');
+      const backSentWrapper = document.getElementById('cardBackSentenceWrapper');
+
+      if (learningDirection === 'EN_DE') {
+        frontLangTag.textContent = "ENGLISCH";
+        backLangTag.textContent = "DEUTSCH";
+        frontText.textContent = card.english;
+        if (card.sentenceEn) { frontSent.textContent = `"${card.sentenceEn}"`; frontSentWrapper.classList.remove('hidden'); } else { frontSentWrapper.classList.add('hidden'); }
+        backText.textContent = card.german;
+        if (card.sentenceDe) { backSent.textContent = `"${card.sentenceDe}"`; backSentWrapper.classList.remove('hidden'); } else { backSentWrapper.classList.add('hidden'); }
+      } else {
+        frontLangTag.textContent = "DEUTSCH";
+        backLangTag.textContent = "ENGLISCH";
+        frontText.textContent = card.german;
+        if (card.sentenceDe) { frontSent.textContent = `"${card.sentenceDe}"`; frontSentWrapper.classList.remove('hidden'); } else { frontSentWrapper.classList.add('hidden'); }
+        backText.textContent = card.english;
+        if (card.sentenceEn) { backSent.textContent = `"${card.sentenceEn}"`; backSentWrapper.classList.remove('hidden'); } else { backSentWrapper.classList.add('hidden'); }
+      }
+    }
+
+    function flipCard() {
+      const flipper = document.getElementById('cardFlipper');
+      isCardFlipped = !isCardFlipped;
+      if (isCardFlipped) flipper.classList.add('is-flipped');
+      else flipper.classList.remove('is-flipped');
+    }
+
+    function resetCardTransform() {
+      document.getElementById('cardFlipper').classList.remove('is-flipped');
+      isCardFlipped = false;
+    }
+
+    function moveCurrentCardToBox(targetBox) {
+      if (learningPool.length === 0) return;
+      const currentCard = learningPool[currentCardIndex];
+      const mainIndex = vocabularies.findIndex(v => v.id === currentCard.id);
+      if (mainIndex !== -1) {
+        vocabularies[mainIndex].box = Number(targetBox);
+        saveVocabularies();
+      }
+      learningPool.splice(currentCardIndex, 1);
+      if (currentCardIndex >= learningPool.length) currentCardIndex = 0;
+      resetCardTransform();
+      updateLearningCardDisplay();
+    }
+
+    function deleteCurrentCard(event) {
+      if (event) event.stopPropagation();
+      if (learningPool.length === 0) return;
+      const currentCard = learningPool[currentCardIndex];
+      deleteVocab(currentCard.id);
+      learningPool.splice(currentCardIndex, 1);
+      if (currentCardIndex >= learningPool.length) currentCardIndex = 0;
+      resetCardTransform();
+      updateLearningCardDisplay();
+    }
+
+    function speakText(event, isBackSide = false) {
+      if (event) event.stopPropagation();
+
+      if (!navigator.onLine) {
+        showToast("Vorlesen benötigt Internetverbindung.", "fa-wifi");
+        return;
+      }
+      if (!('speechSynthesis' in window)) {
+        showToast("Text-to-Speech nicht unterstützt.", "fa-volume-xmark");
+        return;
+      }
+      if (learningPool.length === 0) return;
+
+      const card = learningPool[currentCardIndex];
+      let textToRead = "";
+      let lang = "en-US";
+
+      if (learningDirection === 'EN_DE') {
+        if (!isBackSide) {
+          textToRead = card.english + (card.sentenceEn ? `. ${card.sentenceEn}` : '');
+          lang = "en-US";
+        } else {
+          textToRead = card.german + (card.sentenceDe ? `. ${card.sentenceDe}` : '');
+          lang = "de-DE";
+        }
+      } else {
+        if (!isBackSide) {
+          textToRead = card.german + (card.sentenceDe ? `. ${card.sentenceDe}` : '');
+          lang = "de-DE";
+        } else {
+          textToRead = card.english + (card.sentenceEn ? `. ${card.sentenceEn}` : '');
+          lang = "en-US";
+        }
+      }
+
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(textToRead);
+      utterance.lang = lang;
+      utterance.rate = speechRate;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    async function handleVocabSubmit(e) {
+      e.preventDefault();
+
+      const english = document.getElementById('inputEnglish').value.trim();
+      const german = document.getElementById('inputGerman').value.trim();
+      const sentenceEn = document.getElementById('inputSentenceEn').value.trim();
+      const sentenceDe = document.getElementById('inputSentenceDe').value.trim();
+      const selectedBox = document.querySelector('input[name="targetBox"]:checked').value;
+
+      if (!english || !german) return;
+
+      pendingVocab = {
+        id: editingVocabId || Date.now().toString(),
+        english,
+        german,
+        sentenceEn,
+        sentenceDe,
+        box: Number(selectedBox)
+      };
+
+      if (navigator.onLine) {
+        showToast("Prüfe Übersetzung & Rechtschreibung...", "fa-cloud");
+        try {
+          // 1. Übersetzung Englisch -> Deutsch
+          const resEnDe = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=de&dt=t&q=${encodeURIComponent(english)}`);
+          const dataEnDe = await resEnDe.json();
+
+          if (dataEnDe && dataEnDe[0] && dataEnDe[0][0]) {
+            const apiGermanTranslation = dataEnDe[0][0][0];
+
+            // 2. Rück-Übersetzung Deutsch -> Englisch (Spell-Check Validation)
+            const resDeEn = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=de&tl=en&dt=t&q=${encodeURIComponent(apiGermanTranslation)}`);
+            const dataDeEn = await resDeEn.json();
+
+            let correctEnglishWord = english;
+            if (dataDeEn && dataDeEn[0] && dataDeEn[0][0]) {
+              correctEnglishWord = dataDeEn[0][0][0];
+            }
+
+            const cleanInputEn = english.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const cleanCorrectEn = correctEnglishWord.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+            // Prüfe auf Tippfehler (z.B. lovee vs love)
+            if (cleanInputEn !== cleanCorrectEn && cleanCorrectEn.length > 0) {
+              suggestedTranslation = `${correctEnglishWord} = ${apiGermanTranslation}`;
+              document.getElementById('modalUserTranslation').textContent = `${english} (${german})`;
+              document.getElementById('modalSuggestedTranslation').textContent = suggestedTranslation;
+              pendingVocab.english = correctEnglishWord;
+              document.getElementById('correctionModal').classList.remove('hidden');
+              return;
+            }
+
+            const cleanUserDe = german.toLowerCase().replace(/[^a-äöüßz0-9]/g, '');
+            const cleanApiDe = apiGermanTranslation.toLowerCase().replace(/[^a-äöüßz0-9]/g, '');
+
+            if (cleanApiDe && !cleanUserDe.includes(cleanApiDe) && !cleanApiDe.includes(cleanUserDe)) {
+              suggestedTranslation = apiGermanTranslation;
+              document.getElementById('modalUserTranslation').textContent = german;
+              document.getElementById('modalSuggestedTranslation').textContent = suggestedTranslation;
+              document.getElementById('correctionModal').classList.remove('hidden');
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn("Online-Prüfung konnte nicht ausgeführt werden:", err);
+        }
+      }
+
+      savePendingVocab();
+    }
+
+    function editBeforeSave() {
+      closeCorrectionModal();
+      switchTab('add');
+    }
+
+    function acceptCorrection() {
+      if (pendingVocab && suggestedTranslation) {
+        if (suggestedTranslation.includes('=')) {
+          const parts = suggestedTranslation.split('=');
+          pendingVocab.english = parts[0].trim();
+          pendingVocab.german = parts[1].trim();
+        } else {
+          pendingVocab.german = suggestedTranslation;
+        }
+      }
+      closeCorrectionModal();
+      savePendingVocab();
+    }
+
+    function keepOriginalTranslation() {
+      closeCorrectionModal();
+      savePendingVocab();
+    }
+
+    function saveWithoutCheck() {
+      const english = document.getElementById('inputEnglish').value.trim();
+      const german = document.getElementById('inputGerman').value.trim();
+      const sentenceEn = document.getElementById('inputSentenceEn').value.trim();
+      const sentenceDe = document.getElementById('inputSentenceDe').value.trim();
+      const selectedBox = document.querySelector('input[name="targetBox"]:checked').value;
+
+      if (!english || !german) {
+        showToast("Bitte füllen Sie mindestens die Felder Englisch und Deutsch aus.", "fa-triangle-exclamation");
+        return;
+      }
+
+      pendingVocab = {
+        id: editingVocabId || Date.now().toString(),
+        english,
+        german,
+        sentenceEn,
+        sentenceDe,
+        box: Number(selectedBox)
+      };
+
+      savePendingVocab();
+    }
+
+    function closeCorrectionModal() {
+      document.getElementById('correctionModal').classList.add('hidden');
+    }
+
+    function editVocab(id) {
+      const item = vocabularies.find(v => v.id === id);
+      if (!item) return;
+
+      editingVocabId = id;
+      document.getElementById('editVocabId').value = id;
+      document.getElementById('inputEnglish').value = item.english;
+      document.getElementById('inputGerman').value = item.german;
+      document.getElementById('inputSentenceEn').value = item.sentenceEn || '';
+      document.getElementById('inputSentenceDe').value = item.sentenceDe || '';
+
+      const targetRadio = document.querySelector(`input[name="targetBox"][value="${item.box}"]`);
+      if (targetRadio) targetRadio.checked = true;
+
+      document.getElementById('addFormTitle').textContent = "Vokabel bearbeiten";
+      document.getElementById('addFormSub').textContent = "Passe Wort, deutsche Bedeutung oder Hilfssätze an.";
+      document.getElementById('saveBtnText').textContent = "Änderung prüfen & speichern";
+      document.getElementById('cancelEditBtn').classList.remove('hidden');
+
+      switchTab('add');
+    }
+
+    function cancelEditMode() {
+      editingVocabId = null;
+      document.getElementById('editVocabId').value = "";
+      document.getElementById('addVocabForm').reset();
+      document.getElementById('addFormTitle').textContent = "Neue Vokabel hinzufügen";
+      document.getElementById('addFormSub').textContent = "Erstelle eine neue Karteikarte mit Rechtschreibprüfung.";
+      document.getElementById('saveBtnText').textContent = navigator.onLine ? "Prüfen & Speichern" : "Vokabel speichern (Offline)";
+      document.getElementById('cancelEditBtn').classList.add('hidden');
+    }
+
+    function savePendingVocab() {
+      if (!pendingVocab) return;
+
+      if (editingVocabId) {
+        const index = vocabularies.findIndex(v => v.id === editingVocabId);
+        if (index !== -1) {
+          vocabularies[index] = { ...pendingVocab, id: editingVocabId };
+        }
+        showToast("Vokabel aktualisiert!", "fa-pen");
+      } else {
+        vocabularies.push(pendingVocab);
+        showToast("Vokabel gespeichert!", "fa-check");
+      }
+
+      saveVocabularies();
+      cancelEditMode();
+      pendingVocab = null;
+      switchTab('dashboard');
+    }
+
+    function filterListByBox(filter) {
+      currentListFilter = filter;
+      renderList();
+    }
+
+    function renderList() {
+      const container = document.getElementById('vocabListContainer');
+      const searchQuery = (document.getElementById('searchInput').value || '').toLowerCase();
+
+      document.getElementById('filter-count-all').textContent = vocabularies.length;
+
+      ['all', 1, 2, 3, 4, 5].forEach(f => {
+        const btn = document.getElementById(`filter-btn-${f}`);
+        if (!btn) return;
+        if (f === 'all') {
+          btn.className = f === currentListFilter 
+            ? "py-2 rounded-xl font-bold text-center bg-indigo-600 text-white opacity-100" 
+            : "py-2 rounded-xl font-bold text-center bg-slate-900 text-slate-400 border border-slate-800 opacity-70";
+        } else {
+          btn.className = f === currentListFilter 
+            ? `py-2 rounded-xl font-extrabold text-center bg-box${f} text-slate-950 opacity-100 ring-2 ring-white scale-[1.03]` 
+            : `py-2 rounded-xl font-extrabold text-center bg-box${f} text-slate-950 opacity-40 hover:opacity-90`;
+        }
+      });
+
+      let list = [...vocabularies];
+      if (currentListFilter !== 'all') {
+        list = list.filter(v => Number(v.box) === Number(currentListFilter));
+      }
+
+      if (searchQuery) {
+        list = list.filter(v => v.english.toLowerCase().includes(searchQuery) || v.german.toLowerCase().includes(searchQuery));
+      }
+
+      list.sort((a, b) => a.english.localeCompare(b.english, 'en', { sensitivity: 'base' }));
+
+      if (list.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-slate-500 text-xs sm:text-sm">
+            <i class="fa-solid fa-folder-open text-2xl mb-2 block text-slate-600"></i>
+            Keine Vokabeln gefunden.
+          </div>
+        `;
+        return;
+      }
+
+      const boxColors = {
+        1: 'bg-box1 text-slate-950',
+        2: 'bg-box2 text-slate-950',
+        3: 'bg-box3 text-slate-950',
+        4: 'bg-box4 text-slate-950',
+        5: 'bg-box5 text-slate-950'
+      };
+
+      container.innerHTML = list.map(item => `
+        <div ondblclick="editVocab('${item.id}')" title="Doppelklick zum Bearbeiten" class="glass-card p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between cursor-pointer hover:border-slate-700 transition-all group">
+          <div class="pr-2 space-y-0.5">
+            <div class="flex items-baseline space-x-2">
+              <h4 class="font-display font-bold text-white text-sm sm:text-base group-hover:text-indigo-300 transition-colors">${item.english}</h4>
+              <span class="text-xs text-slate-400">→ ${item.german}</span>
+            </div>
+            ${item.sentenceEn ? `<p class="text-xs text-slate-400 italic line-clamp-1">"${item.sentenceEn}"</p>` : ''}
+          </div>
+
+          <div class="flex items-center space-x-2 shrink-0">
+            <span class="text-[11px] font-extrabold px-2.5 py-1 rounded-lg ${boxColors[item.box]}">
+              K${item.box}
+            </span>
+            <button onclick="event.stopPropagation(); editVocab('${item.id}')" title="Bearbeiten" class="text-slate-500 hover:text-amber-400 p-1.5 transition-colors">
+              <i class="fa-solid fa-pen-to-square text-sm"></i>
+            </button>
+            <button onclick="event.stopPropagation(); deleteVocab('${item.id}')" title="Löschen" class="text-slate-500 hover:text-rose-400 p-1.5 transition-colors">
+              <i class="fa-solid fa-trash-can text-sm"></i>
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function deleteVocab(id) {
+      vocabularies = vocabularies.filter(v => v.id !== id);
+      saveVocabularies();
+      renderList();
+      showToast("Vokabel gelöscht.", "fa-trash-can");
+    }
+
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+
+    window.onload = function() {
+      loadVocabularies();
+      updateOnlineStatus();
+    };
+  </script>
+</body>
+</html>
